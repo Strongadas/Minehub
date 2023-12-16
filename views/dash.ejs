@@ -1,0 +1,66 @@
+<%- include('partials/header-user') %>
+  
+            <div class="container-fluid">
+                <h1 class="mt-4">Dashboard</h1>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="mining-stats text-center">
+                            <div class="dashboard-icons">
+                                <i class="fas fa-coins text-warning"></i>
+                                <div class="icon-label"> Current Balance</div>
+                            </div>
+                           
+                            <h2 class="inline-value">
+                                <span><img src="/images/coin-1.svg" width="24" height="27" alt="bitcoin logo"></span>
+                                <%= bitcoinBalance %>
+                            </h2>
+                            
+
+                            <a href="/withdraw" class="btn btn-success">Withdraw</a>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="mining-stats text-center">
+                            <div class="dashboard-icons">
+                                <i class="fas fa-chart-line text-success"></i>
+                                <div class="icon-label"> <span class="text-warning">BTC 1</span> - Bitcoin Price</div>
+                            </div>
+                            <h2>USD <span class="text-success"><%= cryptoData.bitcoin.usd %></span></h2>
+                        </div>
+                    </div>
+
+                    <!-- dashboard.ejs -->
+
+<div class="col-md-4">
+    <div class="mining-stats text-center">
+        <div class="dashboard-icons">
+            <i class="fas fa-cogs text-primary"></i>
+            <div class="icon-label">Active <% user.hashRates.forEach(rate => { %>
+               
+                <strong>Hash Rate:</strong> <%= rate.hashRate %>
+          
+       <% }); %></div>
+        </div>
+        <ul>
+           
+        </ul>
+        <a href="/buy-contracts" class="btn btn-primary">
+            Buy Hashrate
+        </a>
+    </div>
+</div>
+
+                </div>
+                
+            </div>
+            <%- include('transaction') %>
+             </div>
+        <!-- /#page-content-wrapper -->
+        
+    </div>
+  
+    
+
+ 
+    <%- include('partials/footer-user') %>

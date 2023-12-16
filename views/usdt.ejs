@@ -1,0 +1,49 @@
+<!-- usdtResponse.ejs -->
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>USDT Payment Address</title>
+  <!-- Include Bootstrap CSS -->
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+  <div class="container mt-4">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title">USDT Payment Address</h5>
+      </div>
+      <div class="card-body">
+        <p><strong>Address:</strong> <%= usdtResponse.address %></p>
+        <p><strong>Amount:</strong> $<%= amount %></p>
+        <p><strong>Network:</strong> USDT(TRC-20)</p>
+       
+       
+        <label class="text-muted">it may take up to 24 hours or less due blockchain , mostly 30 min  </label>
+      </div>
+    </div> <br>
+            <div class="text-center">
+                <a href="/dash" class="btn btn-primary">Go to Dashboard</a>
+            </div>
+  </div>
+
+  <div id="qrcode"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator/umd/qrcode.js"></script>
+  <script>
+    // Assuming usdtResponse.address contains the USDT address
+    const usdtAddress = '<%= usdtResponse.address %>';
+
+    // Generate QR code using the address
+    const qr = new QRCode(document.getElementById('qrcode'), {
+      text: usdtAddress,
+      width: 256,
+      height: 256,
+    });
+  </script>
+
+
+
+
+</body>
+</html>
