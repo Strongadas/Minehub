@@ -28,14 +28,14 @@ paypal.configure({
 const client = new Coinpayments({
   key: '68d41e90e4e1fe49c3d527d44167fb0fc808506e5dfa495bc58f53c4fcd44dbb',
   secret: '43e487a17d370a0DD038924b5744c8786ee9Dfc8873c0373b54b0f2bbb8d9C03',
-  autoIpn: true
+  
 });
 
 
 const app = express()
 
-mongoose.connect('mongodb://localhost:27017/MineHubDB')
-//mongoose.connect(process.env.DATABASE_URL)
+//mongoose.connect('mongodb://localhost:27017/MineHubDB')
+mongoose.connect("mongodb+srv://Anacleto:Strongadas@cluster0.odsr23g.mongodb.net/MineHubDB")
 
 app.use(express.static('public'))
 app.set('view engine','ejs')
@@ -517,49 +517,7 @@ app.post('/usdt', ensureAuthenticated, (req, res) => {
   const publicKey = '68d41e90e4e1fe49c3d527d44167fb0fc808506e5dfa495bc58f53c4fcd44dbb';
   const privateKey = '43e487a17d370a0DD038924b5744c8786ee9Dfc8873c0373b54b0f2bbb8d9C03';
   
-  // CoinPayments API endpoint for creating a transaction
-  const apiUrl = 'https://api.coinpayments.net/api.php';
-  
-  // Data for creating a transaction (modify this according to your needs)
-  const payload = {
-    cmd: 'create_transaction',
-    key: publicKey,
-    amount: amount,
-    currency1: 'USD',
-    currency2: 'BTC',
-    buyer_email: user.username,
-    item_name: 'Buying hashrate',
-    ipn_url: 'http://localhost:3000/ipn-handler',
-    // Add more parameters as needed based on the CoinPayments API documentation
-  };
-  
- // Generate HMAC signature for the request
-const hmac = crypto.createHmac('sha512', privateKey);
-hmac.update(JSON.stringify(payload));
-const hmacSignature = hmac.digest('hex');
 
-// Include the HMAC signature in the request payload
-payload['hmac'] = hmacSignature;
-
-// Make a POST request to create a transaction
-axios.post(apiUrl, payload)
-  .then(response => {
-    console.log('Transaction created:');
-    console.log(response.data);
-    // Handle the response here
-  })
-  .catch(error => {
-    if (error.response) {
-      console.error('Error creating transaction:', error.response.status, error.response.data);
-      // Log the full error response
-    } else if (error.request) {
-      console.error('Request made but no response received:', error.request);
-      // Handle request-related errors
-    } else {
-      console.error('Error setting up the request:', error.message);
-      // Handle other errors
-    }
-  })
   
   
 });
@@ -704,12 +662,6 @@ app.post(
     }
   }
 );
-
-
-
-
-
-
 
 
 
