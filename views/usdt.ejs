@@ -14,12 +14,12 @@
         <h5 class="card-title">USDT Payment Address</h5>
       </div>
       <div class="card-body">
-        <p><strong>Address:</strong> <%= usdtResponse.address %></p>
+        <p><strong>Address:</strong> <%= address %></p>
         <p><strong>Amount:</strong> $<%= amount %></p>
         <p><strong>Network:</strong> USDT(TRC-20)</p>
        
        
-        <label class="text-muted">it may take up to 24 hours or less due blockchain , mostly 30 min  </label>
+        <label class="text-muted">it may take up to 24 hours or less due blockchain , mostly 30 min, Fell free to contact our team  </label>
       </div>
     </div> <br>
             <div class="text-center">
@@ -32,7 +32,7 @@
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator/umd/qrcode.js"></script>
   <script>
     // Assuming usdtResponse.address contains the USDT address
-    const usdtAddress = '<%= usdtResponse.address %>';
+    const usdtAddress = '<%= address %>';
 
     // Generate QR code using the address
     const qr = new QRCode(document.getElementById('qrcode'), {

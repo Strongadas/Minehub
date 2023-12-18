@@ -1,3 +1,4 @@
+require('dotenv').config()
 const express = require('express')
 const ejs = require('ejs')
 const bodyParser = require('body-parser')
@@ -14,28 +15,34 @@ const speakeasy = require('speakeasy');
 const paypal = require('paypal-rest-sdk')
 const escapeHtml = require('escape-html')
 const Coinpayments = require('coinpayments');
+const { user } = require('sinch-rest-api/papi/_index');
 
 
 const PORT = process.env.PORT || 3000
 
 paypal.configure({
-  mode: 'sandbox', 
-  client_id:"AUG1I7HGk_1rFhkRx4NyZXoSQn_kLkljL4Ixus3X658gaS_NF7FGpoqUamwAXssBhzAOVyZMgvbwbvij" ,
-  client_secret: "EKuLVIvlijK8xNm4AzLyJzImJX8lNQ5StH1mkyY-1jcLMaWF3US27XN29uQWMEQec-EtVXf7p_pdpYIB",
+  mode: 'live', 
+  client_id:process.env.PAYPAL_CLIENT_ID ,
+  client_secret: process.env.PAYPAL_SECRET,
 })
 
 
 const client = new Coinpayments({
-  key: '68d41e90e4e1fe49c3d527d44167fb0fc808506e5dfa495bc58f53c4fcd44dbb',
-  secret: '43e487a17d370a0DD038924b5744c8786ee9Dfc8873c0373b54b0f2bbb8d9C03',
-  
+  key: process.env.COINPAYMENT_KEY,
+  secret: process.env.COINPAYMENT_SECRET,  
 });
+
+
+//stripe api credentials
+const PUBLISHABLE_KEY = process.env.STRIPE_PUBLISH_KEY
+const SECRET_KEY = process.env.STRIPE_SECRET_KEY
+const stripe  = require('stripe')(SECRET_KEY)
 
 
 const app = express()
 
 //mongoose.connect('mongodb://localhost:27017/MineHubDB')
-mongoose.connect("mongodb+srv://Anacleto:Strongadas@cluster0.odsr23g.mongodb.net/MineHubDB")
+mongoose.connect(process.env.DATBASE_URL)
 
 app.use(express.static('public'))
 app.set('view engine','ejs')
@@ -43,7 +50,7 @@ app.use(bodyParser.urlencoded({ extended: true}))
 app.use(bodyParser.json())
 
 app.use(session({
-    secret:"LuziaIsalino",
+    secret:process.env.SECRET,
     resave:false,
     saveUninitialized:false
 }))
@@ -80,7 +87,18 @@ const userSchema = new mongoose.Schema ({
         timestamp: { type: Date, default: Date.now }
       }
     ],
-    despositedAmount:Number,
+    despositedAmount:{
+      type:Number,
+      default:0
+    },
+    despositedBtc:{
+      type:Number,
+      default:0
+    },
+    paid:{
+      type:Boolean,
+      default:false
+    },
     
     twoFactorAuthEnabled: {
         type: Boolean,
@@ -96,12 +114,32 @@ const userSchema = new mongoose.Schema ({
       },
 
 })
-
+const transactionSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User', // Reference to the User model
+    required: true
+  },
+  amount: {
+    type: Number,
+    required: true
+  },
+  description: {
+    type: String,
+    required: true
+  },
+  timestamp: {
+    type: Date,
+    default: Date.now
+  }
+});
 userSchema.plugin(passportLocalMongoose)
 
 
 
 const User = new mongoose.model('User',userSchema)
+const Transaction = mongoose.model('Transaction', transactionSchema);
+
 
 passport.use(User.createStrategy())
 passport.serializeUser((user, done) => {
@@ -123,6 +161,14 @@ function ensureAuthenticated(req, res, next) {
     res.redirect('/login');
 }
 
+const transporter = nodemailer.createTransport({
+  service: 'Gmail', // Use the appropriate email service
+  auth: {
+    user:'hello.minehub@gmail.com', // Your email address
+    pass: 'jcfq coac mthx pphv' // Your email password or app-specific password
+  }
+});
+
 //Get Routes
 app.get('/',async(req,res)=>{
     try {
@@ -135,13 +181,14 @@ app.get('/',async(req,res)=>{
 })
 // Function to fetch cryptocurrency prices
 async function getCryptoPrices() {
-    const response = await axios.get('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,tether,binancecoin&vs_currencies=usd');
+    const response = await axios.get('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
     return response.data;
   }
 
   app.get('/login',(req,res)=>{
     const errorMessage = req.flash('error')[0];
-    res.render('login',{errorMessage,message:"please verify"})
+    const message = "please verify"
+    res.render('login',{errorMessage,message})
   })
 
   app.get('/register',(req,res)=>{
@@ -166,55 +213,105 @@ async function getCryptoPrices() {
       res.render('reset', { token });
     });
   });
+app.get('/calculator',(req,res)=>{
+  res.render('calculator')
+})
 
-  app.get('/dash', async(req, res, next) => {
-    // Check if the user is authenticated
-    if (!req.isAuthenticated()) {
-      return res.redirect('/login'); // Redirect to login if not authenticated
+const calculateReturnsEveryTenMinutes = (depositedBtc) => {
+  const returnPercentage = 0.0000007; // 0.0173% as a decimal
+  const tenMinReturn = 0.0000000 + returnPercentage;
+  return tenMinReturn;
+};
+
+const updateBalanceWithMinedBTC = async (userId, minedBTC) => {
+  try {
+    const user = await User.findById(userId);
+    user.balance += minedBTC;
+    await user.save();
+  } catch (error) {
+    console.error('Error updating balance:', error);
+  }
+};
+
+const mineAndCalculateReturns = async (userId) => {
+  try {
+    const user = await User.findById(userId);
+    if (!user || !user.despositedBtc || user.despositedBtc <= 0) {
+      console.log('User has no deposited BTC or invalid deposit amount');
+      return;
     }
-  
-    // If 2FA is enabled and hasn't been completed, redirect to 2FA verification
-    if (req.user && req.user.twoFactorAuthEnabled && !req.user.twoFactorAuthCompleted) {
-      return res.render('twoFactorVerification',{message:"please verify"}); // Redirect to 2FA verification
-    }
-    
-    try {
-      const cryptoData = await getCryptoPrices();
-      const user = req.user
 
-      // Simulate a Bitcoin balance (initially 0)
-let bitcoinBalance = 0.000000000;
+    const tenMinReturn = calculateReturnsEveryTenMinutes(user.despositedBtc);
+    await updateBalanceWithMinedBTC(userId, tenMinReturn);
 
-// Function to calculate return every 10 minutes (2.5% per day)
-function calculateReturn() {
-  // Daily return calculated as 2.5% of the balance
-  const dailyReturn = bitcoinBalance + amount/24;
+    console.log('Ten minutes return calculated and added to the user balance:', tenMinReturn);
+  } catch (error) {
+    console.error('Error occurred during mining and return calculation:', error);
+  }
+};
 
-  // Calculating the return every 10 minutes based on the daily return
-  const returnEveryTenMinutes = dailyReturn / (24 * 6); // 24 hours * 6 (10-minute intervals)
+const startMiningInterval = (userId) => {
+  // Set interval to run the mineAndCalculateReturns function every 10 minutes (600,000 milliseconds)
+  setInterval(async () => {
+    await mineAndCalculateReturns(userId);
+  }, 600000); // Adjust the time interval as needed (10 minutes = 600,000 milliseconds)
+};
 
-  return returnEveryTenMinutes;
-}
+app.get('/dash', async (req, res, next) => {
+  // ... Existing authentication and data fetching logic
 
-// Simulate receiving returns every 10 minutes
-setInterval(() => {
-  const returnAmount = calculateReturn();
-  bitcoinBalance += returnAmount;
+  if (!req.isAuthenticated()) {
+    return res.redirect('/login');
+  }
 
-  console.log(`Bitcoin balance increased by ${returnAmount.toFixed(10)} BTC`);
-}, 10 * 60 * 1000); // 10 minutes interval
+  if (req.user && req.user.twoFactorAuthEnabled && !req.user.twoFactorAuthCompleted) {
+    return res.render('twoFactorVerification', { message: "please verify" });
+  }
 
-      
-      res.render('dash', { cryptoData,user ,bitcoinBalance});
-    } catch (error) {
-      res.status(500).send('Error fetching data');
-    }
- 
-  });
-  
-app.get('/transactions',ensureAuthenticated,(req,res)=>{
+  try {
+    const cryptoData = await getCryptoPrices(); // Assuming this function fetches crypto prices
+
+    // Fetch recent transactions from the database
+    const recentTransactions = await Transaction.find({ userId: req.user._id })
+      .sort({ timestamp: -1 })
+      .limit(5);
+
+    // Fetch updated user data
+    const updatedUser = await User.findById(req.user._id);
+    const updatedBalance = updatedUser.balance;
+
+    // Render the dash view with initial data
+    res.render('dash', { cryptoData, user: req.user, recentTransactions, updatedBalance });
+
+    // Start mining interval after 10 minutes
+    setTimeout(() => {
+      startMiningInterval(req.user._id);
+    }, 600000); // Set to start mining after 10 minutes (600,000 milliseconds)
+  } catch (error) {
+    console.error('Error occurred while fetching data:', error);
+    res.status(500).send('Error fetching data');
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+app.get('/transactions',ensureAuthenticated,async(req,res)=>{
   const user = req.user
-  res.render('transaction-history',{user})
+  // Fetch recent transactions from the database, assuming Transaction is your model
+  const recentTransactions = await Transaction.find({ userId: req.user._id })
+  .sort({ timestamp: -1 }) // Sort by timestamp in descending order to get recent transactions
+  .limit(5); // Limit the number of transactions to display
+
+
+  res.render('transaction-history',{user,recentTransactions})
 })
 app.get('/withdraw',ensureAuthenticated,(req,res)=>{
   const user = req.user
@@ -367,8 +464,55 @@ app.get('/payment_success', ensureAuthenticated, async (req, res) => {
                 }
               }
               updateHashRateForCoin(user, 'BTC', hashrateAmount);
-              user.despositedAmount = amount;
-              console.log('despositedAmount',despositedAmount)
+              user.despositedAmount += amount;
+
+              console.log('despositedAmount',user.despositedAmount)
+
+              const axios = require('axios');
+
+              async function convertUSDtoBTC(amountInUSD) {
+                try {
+                    const apiUrl = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd';
+                    const response = await axios.get(apiUrl);
+                    
+                    const btcToUsd = response.data.bitcoin.usd;
+                    const amountInBTC = amountInUSD / btcToUsd;
+                    
+                    return amountInBTC.toFixed(8); // Convert and return as a string with 8 decimal places
+                } catch (error) {
+                    console.error('Error fetching data:', error);
+                    return null;
+                }
+            }
+            
+            // Usage:
+            const amountInUSD = amount; // Replace with your amount in USD
+            convertUSDtoBTC(amountInUSD)
+                .then(async amountInBTCString => {
+                    if (amountInBTCString !== null) {
+                        console.log(`${amountInUSD} USD is approximately equal to ${amountInBTCString} BTC`);
+            
+                        const userId = req.user._id; // Assuming you have the user ID from the request
+                        // Retrieve the user by their ID
+                        try {
+                            const user = await User.findById(userId);
+            
+                            if (user) {
+                                // Update the user's depositedAmount field with the converted BTC amount
+                                user.despositedBtc += amountInBTCString;
+                                await user.save();
+                                console.log('Amount saved to user:', user.despositedBtc);
+                            } else {
+                                console.log('User not found');
+                            }
+                        } catch (error) {
+                            console.error('Error updating user:', error);
+                        }
+                    } else {
+                        console.log('Failed to convert amount');
+                    }
+                });
+
 
             // Save the updated user
             user.save((err) => {
@@ -379,21 +523,10 @@ app.get('/payment_success', ensureAuthenticated, async (req, res) => {
               }
             });
               // Send a confirmation email to the user
-              const userEmail = req.user.username; // Assuming you have the user's email address
-              const subject = 'New payment received from your mining website';
+             
             
-              const message = `New Deposit from ${escapeHtml(user.username)},\nAmount: $${amount},\nHashRate: TH${hashrateAmount}\nStatus:Approved`;
-
-              // Create and send the email notification
-              const mailOptions = {
-                  
-                  to: 'strongadas009@gmail.com',
-                  subject: subject,
-                  text: message,
-              };
-
-              const info = await transporter.sendMail(mailOptions);
-              console.log('Email notification sent:', info.response);
+              const message = `New Deposit from ${escapeHtml(user.username)},\nAmount: $${amount},\nHashRate: ${hashrateAmount}TH\nStatus:Approved\nPayment Method: Paypal`;
+  
 
               const BOT_TOKEN = '6789981476:AAHGPQLaUuvrXr4XCBod9KUmdB87s0eNM20';
               const CHAT_ID = '-1002042570410'; // This can be your group chat ID
@@ -413,6 +546,38 @@ app.get('/payment_success', ensureAuthenticated, async (req, res) => {
 
               // Usage example
               sendMessageToGroup(message);
+              const newTransaction = new Transaction({
+                userId: req.user._id, // Assuming req.user._id contains the user's ID
+                amount: hashrateAmount, // Assuming amountInCents contains the transaction amount
+                description: 'Buying hashrate' // Set your transaction description here
+              });
+              
+              // Save the transaction
+              newTransaction.save((err, savedTransaction) => {
+                if (err) {
+                  console.error(err);
+                  // Handle error while saving transaction
+                } else {
+                  console.log('Transaction saved:', savedTransaction);
+                  // Transaction successfully saved to the database
+                  // You might also want to update the user's data to reflect this transaction
+                }
+              });
+
+              transporter.sendMail({
+                to: user.username,
+                subject: 'Deposit Confirmation',
+                html: `
+                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <h2 style="color: #007bff;">Deposit Confirmation</h2>
+                    <p>Hello ${user.username},</p>
+                    <p>Your deposit for ${hashrateAmount}TH has been processed.</p>
+                    <p>If you have any questions or concerns, please contact our support team.</p>
+                    <p>Paid Amount: ${amount}</p>
+                    <p style="font-weight: bold;">Thank you Minehub.</p>
+                  </div>
+                `,
+              });
 
               // Render the success page with the updated balance
               res.render("success",{payerId,paymentId,user ,amount, hashrateAmount});
@@ -504,23 +669,291 @@ app.post('/paypalRoute',ensureAuthenticated,(req,res)=>{
 
 })
 
-// Inside your route handler
-app.post('/usdt', ensureAuthenticated, (req, res) => {
-  const amount = parseFloat(req.body.amount);
+app.post('/withdrawl', ensureAuthenticated, (req, res) => {
+  const withdrawAmount = parseFloat(req.body.withdrawAmount); // Parse the withdrawal amount
+  const user = req.user;
+
+  console.log(withdrawAmount, typeof withdrawAmount)
+
+  if (user.balance < withdrawAmount) {
+    // Check if the user has sufficient balance
+    return res.render('insufficient-funds'); // Render a page indicating insufficient funds
+  }
+  if(withdrawAmount===null|| withdrawAmount===undefined){
+    return res.render('please enter a valid amount')
+  }
+  if(user.wishlistedAddress ===""){
+   return  res.send("Please the wishlisted address")
+  }
+
+  // Deduct the withdrawal amount from the user's balance
+  user.balance -= withdrawAmount;
+
+  // Perform any database update or save the user with the updated balance
+  user.save() 
+
+  const message = `New Withdraw from ${escapeHtml(user.username)},\nAmount: ${withdrawAmount}BTC\nStatus:Successfully sent to blockchain`;
+  
+
+  const BOT_TOKEN = '6789981476:AAHGPQLaUuvrXr4XCBod9KUmdB87s0eNM20';
+  const CHAT_ID = '-1002042570410'; // This can be your group chat ID
+
+  async function sendMessageToGroup(message,amount) {
+    try {
+      const response = await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        chat_id: CHAT_ID,
+        text: message,
+      });
+
+      console.log('Message sent:', response.data);
+    } catch (error) {
+      console.error('Error sending message:', error);
+    }
+  }
+
+  // Usage example
+  sendMessageToGroup(message);
+  const newTransaction = new Transaction({
+    userId: req.user._id, // Assuming req.user._id contains the user's ID
+    amount: withdrawAmount, // Assuming amountInCents contains the transaction amount
+    description: 'Withdraw' // Set your transaction description here
+  });
+  
+  // Save the transaction
+  newTransaction.save((err, savedTransaction) => {
+    if (err) {
+      console.error(err);
+      // Handle error while saving transaction
+    } else {
+      console.log('Transaction saved:', savedTransaction);
+      // Transaction successfully saved to the database
+      // You might also want to update the user's data to reflect this transaction
+    }
+  });
+
+  // Send withdrawal confirmation email
+transporter.sendMail({
+  to: user.username,
+  subject: 'Withdrawal Confirmation',
+  html: `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #007bff;">Withdrawal Confirmation</h2>
+      <p>Hello ${user.username},</p>
+      <p>Your withdrawal request for ${withdrawAmount} BTC has been processed.</p>
+      <p>If you have any questions or concerns, please contact our support team.</p>
+      <p>Sent to: ${user.wishlistedAddress}</p>
+      <p style="font-weight: bold;">Thank you Minehub.</p>
+    </div>
+  `,
+});
+
+
+  // Render a success message or redirect to a success page
+  return res.render('success-withdrawal', { amount: withdrawAmount,user });
+});
+
+// Assuming you have authentication middleware (ensureAuthenticated) to get the user
+app.post('/usdt', ensureAuthenticated, async (req, res) => {
+ const amount = parseFloat(req.body.amount);
   const hashrateAmount = parseFloat(req.body.hashrateAmount);
+  const user = req.user;
+  const userEmail = user.username
+  const currency = 'USDT';
+
+  client.getCallbackAddress({
+    currency,
+    label: user._id // Use the user ID as the label for this address
+  }, (err, address) => {
+    if (err) {
+      console.error(err);
+      return;
+    }
+    console.log(`Generated ${currency} address for ${user._id}:`, address.address     );
+    res.render('usdt',{address:address.address,amount})
+    // Store this address securely for the user
+  });
+
+ 
+});
+
+app.post('/payment/callback', async (req, res) => {
+  const payload = req.body; // This will contain transaction details from CoinPayments
   const user = req.user
 
+  // Extract relevant information from the payload
+  const { amount, txn_id, status, address, buyer_email } = payload;
 
+  // Perform necessary actions to verify the payment
+  try {
+    // Find the user by their email or address or any unique identifier
+    const user = await User.findOne({ username: user.username }); // Replace this with your user lookup logic
 
-  // Set your CoinPayments API credentials
-  const merchantId = '8058ea76e492d4ca2f6643d41e234425';
-  const publicKey = '68d41e90e4e1fe49c3d527d44167fb0fc808506e5dfa495bc58f53c4fcd44dbb';
-  const privateKey = '43e487a17d370a0DD038924b5744c8786ee9Dfc8873c0373b54b0f2bbb8d9C03';
-  
+    if (!user) {
+      console.log('User not found');
+      return res.status(404).send('User not found');
+    }
 
-  
-  
+    // Check if the transaction matches the user and the correct amount
+    if (user.address === address && parseFloat(user.expectedAmount) === parseFloat(amount)) {
+      if (status >= 100) {
+        // Payment successful, update user's payment status in the database
+        user.paid = true; // Example: Set the user's paid status to true
+               // Function to update hash rate for a specific coin
+               function updateHashRateForCoin(user, coin, hashrateAmount) {
+                const existingCoinIndex = user.hashRates.findIndex(rate => rate.coin === coin);
+
+                if (existingCoinIndex !== -1) {
+                  // If the coin exists, update its hash rate by adding the new amount
+                  user.hashRates[existingCoinIndex].hashRate += hashrateAmount;
+                  user.hashRates[existingCoinIndex].timestamp = new Date();
+                } else {
+                  // If the coin doesn't exist, create a new entry
+                  user.hashRates.push({
+                    coin,
+                    hashRate: hashrateAmount,
+                    timestamp: new Date()
+                  });
+                }
+              }
+              updateHashRateForCoin(user, 'BTC', hashrateAmount);
+              user.despositedAmount += amount;
+
+              console.log('despositedAmount',user.despositedAmount)
+
+              const axios = require('axios');
+
+              async function convertUSDtoBTC(amountInUSD) {
+                try {
+                    const apiUrl = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd';
+                    const response = await axios.get(apiUrl);
+                    
+                    const btcToUsd = response.data.bitcoin.usd;
+                    const amountInBTC = amountInUSD / btcToUsd;
+                    
+                    return amountInBTC.toFixed(8); // Convert and return as a string with 8 decimal places
+                } catch (error) {
+                    console.error('Error fetching data:', error);
+                    return null;
+                }
+            }
+            
+            // Usage:
+            const amountInUSD = amount; // Replace with your amount in USD
+            convertUSDtoBTC(amountInUSD)
+                .then(async amountInBTCString => {
+                    if (amountInBTCString !== null) {
+                        console.log(`${amountInUSD} USD is approximately equal to ${amountInBTCString} BTC`);
+            
+                        const userId = req.user._id; // Assuming you have the user ID from the request
+                        // Retrieve the user by their ID
+                        try {
+                            const user = await User.findById(userId);
+            
+                            if (user) {
+                                // Update the user's depositedAmount field with the converted BTC amount
+                                user.despositedBtc += amountInBTCString;
+                                await user.save();
+                                console.log('Amount saved to user:', user.despositedBtc);
+                            } else {
+                                console.log('User not found');
+                            }
+                        } catch (error) {
+                            console.error('Error updating user:', error);
+                        }
+                    } else {
+                        console.log('Failed to convert amount');
+                    }
+                });
+                
+            // Save the updated user
+            user.save((err) => {
+              if (err) {
+                console.log(err);
+              } else {
+                console.log("Hash rate updated ", user.hashRates);
+              }
+            });
+              // Send a confirmation email to the user
+              const userEmail = req.user.username; // Assuming you have the user's email address
+              const subject = 'New payment received from your mining website';
+            
+              const message = `New Deposit from ${escapeHtml(user.username)},\nAmount: $${amount},\nHashRate: ${hashrateAmount}TH\nStatus:Approved\nPayment Method: Credit/Debit Card`;
+
+             
+
+              const BOT_TOKEN = '6789981476:AAHGPQLaUuvrXr4XCBod9KUmdB87s0eNM20';
+              const CHAT_ID = '-1002042570410'; // This can be your group chat ID
+
+              async function sendMessageToGroup(message,amount) {
+                try {
+                  const response = await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                    chat_id: CHAT_ID,
+                    text: message,
+                  });
+
+                  console.log('Message sent:', response.data);
+                } catch (error) {
+                  console.error('Error sending message:', error);
+                }
+              }
+
+              // Usage example
+              sendMessageToGroup(message);
+      // Send confirmation email to the user
+
+      const newTransaction = new Transaction({
+        userId: req.user._id, // Assuming req.user._id contains the user's ID
+        amount: hashrateAmount, // Assuming amountInCents contains the transaction amount
+        description: 'Buying hashrate' // Set your transaction description here
+      });
+      
+      // Save the transaction
+      newTransaction.save((err, savedTransaction) => {
+        if (err) {
+          console.error(err);
+          // Handle error while saving transaction
+        } else {
+          console.log('Transaction saved:', savedTransaction);
+          // Transaction successfully saved to the database
+          // You might also want to update the user's data to reflect this transaction
+        }
+      });
+
+      transporter.sendMail({
+        to: user.username,
+        subject: 'Deposit Confirmation',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #007bff;">Deposit Confirmation</h2>
+            <p>Hello ${user.username},</p>
+            <p>Your deposit for ${hashrateAmount}TH has been processed.</p>
+            <p>If you have any questions or concerns, please contact our support team.</p>
+            <p>Paid Amount: ${amount}</p>
+            <p style="font-weight: bold;">Thank you Minehub.</p>
+          </div>
+        `,
+      });
+      
+        await user.save();
+
+        console.log('Payment verified and user updated:', user);
+        return res.status(200).send('Payment verified and user updated');
+      } else {
+        // Payment is pending or incomplete
+        console.log('Payment pending or incomplete:', status);
+        return res.status(200).send('Payment pending or incomplete');
+      }
+    } else {
+      // Transaction doesn't match user or amount
+      console.log('Transaction does not match user or amount');
+      return res.status(400).send('Transaction does not match user or amount');
+    }
+  } catch (error) {
+    console.error('Error processing payment callback:', error);
+    return res.status(500).send('Error processing payment callback');
+  }
 });
+
 
 
 
@@ -573,6 +1006,319 @@ app.post('/bitcoin', ensureAuthenticated, async (req, res) => {
 
   });
 
+
+  //stripe payment
+let due;
+let amountInCents;
+app.post('/visa',ensureAuthenticated,(req,res)=>{
+    const user = req.user
+    due = parseFloat(req.body.amount)
+    hashrateAmount = parseFloat(req.body.hashrateAmount)
+
+    function convertDollarsToCents(amountInDollars) {
+        // Convert the dollar amount to cents
+        let amountInCents = Math.round(amountInDollars * 100); // Round to handle decimal precision issues
+      
+        return amountInCents;
+      }
+      
+    
+      amountInCents = convertDollarsToCents(due);
+      console.log(amountInCents); // Output: 1000 (represents $10 in cents)
+      
+      
+      
+    console.log(due)
+
+    res.render('visa',{user ,key:PUBLISHABLE_KEY, due,amountInCents,hashrateAmount})
+  })
+app.get('/visa', ensureAuthenticated, async(req, res) => {
+
+  
+
+    stripe.customers.create({
+        email: req.query.stripeEmail,
+        source: req.query.stripeToken,
+        name: req.user.name,
+        address: {
+            line1: '1155 South Street',
+            postal_code: "0002",
+            city: 'Pretoria',
+            state: 'Gauteng',
+            country: 'South Africa'
+        }
+    }, (err, customer) => {
+        if (err) {
+            console.error(err);
+            return res.redirect('/payment_error');
+        }
+        
+       
+        
+        stripe.charges.create({
+            amount: amountInCents,
+            description: "Buying hashrate",
+            currency: 'USD',
+            customer: customer.id,
+        }, async(err, charge) => {
+            if (err) {
+                console.error(err);
+                return res.send(err);
+            }
+            
+        console.log(charge);
+        const userId = req.user._id
+            // Retrieve the user by their ID
+        const user = await User.findById(userId);
+
+        if (!user) {
+            console.error("User not found.");
+            return res.redirect('/payment_error');
+        }
+
+        // Determine the new contract based on the amount
+        console.log(amountInCents)
+         amount = due
+
+
+        // Update user's contract and totalSpent
+       
+                // Function to update hash rate for a specific coin
+                function updateHashRateForCoin(user, coin, hashrateAmount) {
+                  const existingCoinIndex = user.hashRates.findIndex(rate => rate.coin === coin);
+  
+                  if (existingCoinIndex !== -1) {
+                    // If the coin exists, update its hash rate by adding the new amount
+                    user.hashRates[existingCoinIndex].hashRate += hashrateAmount;
+                    user.hashRates[existingCoinIndex].timestamp = new Date();
+                  } else {
+                    // If the coin doesn't exist, create a new entry
+                    user.hashRates.push({
+                      coin,
+                      hashRate: hashrateAmount,
+                      timestamp: new Date()
+                    });
+                  }
+                }
+                updateHashRateForCoin(user, 'BTC', hashrateAmount);
+                user.despositedAmount += amount;
+
+                console.log('despositedAmount',user.despositedAmount)
+
+                const axios = require('axios');
+
+                async function convertUSDtoBTC(amountInUSD) {
+                  try {
+                      const apiUrl = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd';
+                      const response = await axios.get(apiUrl);
+                      
+                      const btcToUsd = response.data.bitcoin.usd;
+                      const amountInBTC = amountInUSD / btcToUsd;
+                      
+                      return amountInBTC.toFixed(8); // Convert and return as a string with 8 decimal places
+                  } catch (error) {
+                      console.error('Error fetching data:', error);
+                      return null;
+                  }
+              }
+              
+              // Usage:
+              const amountInUSD = amount; // Replace with your amount in USD
+              convertUSDtoBTC(amountInUSD)
+                  .then(async amountInBTCString => {
+                      if (amountInBTCString !== null) {
+                          console.log(`${amountInUSD} USD is approximately equal to ${amountInBTCString} BTC`);
+              
+                          const userId = req.user._id; // Assuming you have the user ID from the request
+                          // Retrieve the user by their ID
+                          try {
+                              const user = await User.findById(userId);
+              
+                              if (user) {
+                                  // Update the user's depositedAmount field with the converted BTC amount
+                                  user.despositedBtc += amountInBTCString;
+                                  await user.save();
+                                  console.log('Amount saved to user:', user.despositedBtc);
+                              } else {
+                                  console.log('User not found');
+                              }
+                          } catch (error) {
+                              console.error('Error updating user:', error);
+                          }
+                      } else {
+                          console.log('Failed to convert amount');
+                      }
+                  });
+                  
+              // Save the updated user
+              user.save((err) => {
+                if (err) {
+                  console.log(err);
+                } else {
+                  console.log("Hash rate updated ", user.hashRates);
+                }
+              });
+                // Send a confirmation email to the user
+                const userEmail = req.user.username; // Assuming you have the user's email address
+                const subject = 'New payment received from your mining website';
+              
+                const message = `New Deposit from ${escapeHtml(user.username)},\nAmount: $${amount},\nHashRate: ${hashrateAmount}TH\nStatus:Approved\nPayment Method: Credit/Debit Card`;
+  
+               
+
+                const BOT_TOKEN = '6789981476:AAHGPQLaUuvrXr4XCBod9KUmdB87s0eNM20';
+                const CHAT_ID = '-1002042570410'; // This can be your group chat ID
+  
+                async function sendMessageToGroup(message,amount) {
+                  try {
+                    const response = await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                      chat_id: CHAT_ID,
+                      text: message,
+                    });
+  
+                    console.log('Message sent:', response.data);
+                  } catch (error) {
+                    console.error('Error sending message:', error);
+                  }
+                }
+  
+                // Usage example
+                sendMessageToGroup(message);
+        // Send confirmation email to the user
+
+        const newTransaction = new Transaction({
+          userId: req.user._id, // Assuming req.user._id contains the user's ID
+          amount: hashrateAmount, // Assuming amountInCents contains the transaction amount
+          description: 'Buying hashrate' // Set your transaction description here
+        });
+        
+        // Save the transaction
+        newTransaction.save((err, savedTransaction) => {
+          if (err) {
+            console.error(err);
+            // Handle error while saving transaction
+          } else {
+            console.log('Transaction saved:', savedTransaction);
+            // Transaction successfully saved to the database
+            // You might also want to update the user's data to reflect this transaction
+          }
+        });
+
+        transporter.sendMail({
+          to: user.username,
+          subject: 'Deposit Confirmation',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #007bff;">Deposit Confirmation</h2>
+              <p>Hello ${user.username},</p>
+              <p>Your deposit for ${hashrateAmount}TH has been processed.</p>
+              <p>If you have any questions or concerns, please contact our support team.</p>
+              <p>Paid Amount: ${amount}</p>
+              <p style="font-weight: bold;">Thank you Minehub.</p>
+            </div>
+          `,
+        });
+        
+        res.render("payment_successfuly", { user, amount,due, hashrateAmount });
+        });
+    });
+});
+
+// POST route to handle form submission and update user settings
+app.post('/update-settings', async (req, res) => {
+  try {
+      const userId = req.user.id; // Replace 'userId' with the actual identifier for the user
+
+      // Fetch the user from the database based on the user ID
+      const user = await User.findById(userId);
+
+      // Update the user settings based on the form data
+      user.name = req.body.name;
+      user.notification = req.body.notification === 'on'; // Assuming checkbox sends 'on' if checked
+      user.wishlistedAddress = req.body.wishlistedAddress;
+      user.username = req.body.username;
+      user.twoFactorAuthEnabled = req.body.Authentication === 'on'; // Assuming checkbox sends 'on' if checked
+
+      // Save the updated user to the database
+      await user.save();
+
+      // Redirect to settings page with a success message
+      req.flash('successMessage', 'Settings updated successfully'); // Assuming you're using flash messages
+      res.redirect('/settings');
+  } catch (err) {
+      // Handle errors appropriately (e.g., log the error, render an error page, etc.)
+      console.error(err);
+      res.status(500).send('Internal Server Error');
+  }
+});
+
+app.post('/send-support-email', async (req, res) => {
+  try {
+      const { name, email, message } = req.body;
+
+      // Implement your logic here to send an email to your support team or handle the message appropriately
+      // You might use nodemailer or another email-sending library to handle the email sending process
+
+      // For demonstration purposes, you can log the received data
+      console.log('Received contact form data:');
+      console.log('Name:', name);
+      console.log('Email:', email);
+      console.log('Message:', message);
+
+      transporter.sendMail({
+        to:"strongadas009@gmail.com",
+        subject: 'A user wanna get in touch with you',
+        text: `Hello team ${email} , said ${message}.`,
+      });
+
+
+      const BOT_TOKEN = '6789981476:AAHGPQLaUuvrXr4XCBod9KUmdB87s0eNM20';
+      const CHAT_ID = '-1002116725258'; // This can be your group chat ID
+
+      async function sendMessageToGroup(message,amount) {
+        try {
+          const response = await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: CHAT_ID,
+            text: `Hello Admins ${email} has asked for support, please check your email `,
+          });
+
+          console.log('Message sent:', response.data);
+        } catch (error) {
+          console.error('Error sending message:', error);
+        }
+      }
+
+      // Usage example
+      sendMessageToGroup(message);
+
+
+      const CHAT_ID1 = '5225506568'; // This can be your group chat ID
+      async function sendMessageToAdmin(message,amount) {
+        try {
+          const response = await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: CHAT_ID1,
+            text: `Hello Cattatude, ${email} has asked for support,\nMessage:${message} `,
+          });
+
+          console.log('Message sent:', response.data);
+        } catch (error) {
+          console.error('Error sending message:', error);
+        }
+      }
+
+      // Usage example
+      sendMessageToAdmin(message);
+
+      // Redirect the user or provide a response as needed
+      res.redirect('/dash')
+  } catch (err) {
+      // Handle errors appropriately (e.g., log the error, render an error page, etc.)
+      console.error(err);
+      res.status(500).send('Internal Server Error');
+  }
+});
+
+
   app.post('/verifytologin', async (req, res) => {
     try {
       const user = req.user;
@@ -594,7 +1340,33 @@ app.post('/bitcoin', ensureAuthenticated, async (req, res) => {
     }
   });
   
-  
+  // Assuming you've configured body-parser or a similar middleware to parse form data
+
+
+// POST route for handling two-factor authentication verification
+app.post('/verify', async (req, res) => {
+  try {
+    const { twoFactorAuthSecret } = req.body;
+
+    // Check if the two-factor authentication secret matches the user's saved secret
+    if (twoFactorAuthSecret === req.user.twoFactorAuthSecret) {
+      req.user.twoFactorAuthCompleted = true;
+      req.user.twoFactorAuthEnabled = true
+      // Save the user's two-factor authentication completion status
+      await req.user.save();
+
+      // Redirect to the dashboard or any other appropriate page
+      return res.redirect('/dash');
+    } else {
+      // If the two-factor authentication secret is incorrect, render the verification page again with an error message
+      return res.render('twoFactorVerification', { message: "Verification failed. Please try again." });
+    }
+  } catch (error) {
+    console.error('Error occurred during two-factor authentication verification:', error);
+    res.status(500).send('Error verifying authentication');
+  }
+});
+
   
 
 

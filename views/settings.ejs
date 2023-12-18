@@ -39,8 +39,20 @@
                 <div class="setting-item">
                     <i class="fas fa-money-bill-wave"></i>
                     <span>Wishlisted Address</span>
-                    <input type="text" class="form-control setting-input" placeholder="Add Your Wishlisted Address..." value="<%- user.wishlistedAddress %>" name="wishlistedAddress">
+                    <% if (user.wishlistedAddress) { %>
+                        <input type="text" class="form-control setting-input" value="<%- user.wishlistedAddress %>" name="wishlistedAddress" readonly> <br>
+                        
+                    <% } else { %>
+                        <input type="text" class="form-control setting-input" placeholder="Add Your Wishlisted Address..." value="" name="wishlistedAddress">
+                    <% } %>
                 </div>
+                <label  class="text-muted text-center">
+                    If you need to change the wishlistedAddress please
+                    <a href="https://t.me/minehuboffical" target="_blank">contact us</a>
+                   
+                </label>
+               
+              
                 <div class="setting-item">
                     <i class="fas fa-envelope"></i>
                     <span>Email Address</span>

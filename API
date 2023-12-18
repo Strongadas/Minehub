@@ -11,3 +11,96 @@ marchent=8058ea76e492d4ca2f6643d41e234425
 
 
 333bd703-ec7a-47a0-9a98-1ed4d30be5a6
+
+  user.balance += minedAmount * btcPriceInUSD; 
+
+
+
+
+
+
+  app.get('/dash', async (req, res, next) => {
+  if (!req.isAuthenticated()) {
+    return res.redirect('/login');
+  }
+
+  if (req.user && req.user.twoFactorAuthEnabled && !req.user.twoFactorAuthCompleted) {
+    return res.render('twoFactorVerification', { message: "please verify" });
+  }
+
+  try {
+    const cryptoData = await getCryptoPrices(); // Assuming this function fetches crypto prices
+    const user = req.user;
+
+    // Fetch recent transactions from the database, assuming Transaction is your model
+    const recentTransactions = await Transaction.find({ userId: req.user._id })
+      .sort({ timestamp: -1 })
+      .limit(5);
+
+    // Start mining for the user
+    const minedBTC = mineBTC(user.hashRates); // Assuming a function mineBTC for mining
+    console.log(mineBTC)
+    // Calculate returns based on deposited BTC
+    const returns = calculateReturns(user.depositedBtc); // Assuming calculateReturns function
+    console.log(returns)
+    // Update user's balance with mined BTC
+    const updatedBalance = user.balance + minedBTC;
+
+    res.render('dash', { cryptoData, user, recentTransactions, updatedBalance, returns });
+  } catch (error) {
+    console.error('Error occurred while fetching data:', error);
+    res.status(500).send('Error fetching data');
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+// Endpoint to receive CoinPayments callbacks
+app.post('/coinpayments/callback', async (req, res) => {
+  // Handle the callback data sent by CoinPayments
+  const { ipn_mode, ipn_type, /* extract relevant data from req.body */ } = req.body;
+
+  // Validate the callback (optional but highly recommended)
+  if (ipn_mode === 'hmac' /* Perform HMAC validation if enabled */) {
+    // Implement HMAC validation using API_SECRET and req.body
+    // Ensure the request is legitimate to prevent fraudulent callbacks
+    // Return an error or handle accordingly if validation fails
+  }
+
+  // Process payment status here and update your system accordingly
+  // Example: Check if the payment is complete or pending
+
+  // Send a response to CoinPayments to acknowledge receipt of the callback
+  res.status(200).send('OK');
+
+  // You can perform additional actions here based on the payment status
+  // For instance, trigger sending a product, update a database, etc.
+});
+
+// Function to query transaction status using CoinPayments API
+async function checkTransactionStatus(transactionId) {
+  try {
+    const response = await axios.post('https://www.coinpayments.net/api/v1/get_tx_info', {
+      key: API_KEY,
+      secret: API_SECRET,
+      txid: transactionId,
+    });
+
+    // Process the response to determine payment status
+    // Update your system based on the payment status received
+    // Example: Check response.status and update database accordingly
+
+  } catch (error) {
+    console.error('Error:', error.response.data);
+    // Handle errors from the API request
+  }
+}
