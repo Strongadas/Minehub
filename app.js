@@ -14,7 +14,7 @@ const speakeasy = require('speakeasy');
 const paypal = require('paypal-rest-sdk')
 const escapeHtml = require('escape-html')
 const Coinpayments = require('coinpayments');
-const { user } = require('sinch-rest-api/papi/_index');
+
 
 
 const PORT = process.env.PORT || 3000
