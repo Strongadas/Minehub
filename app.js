@@ -10,7 +10,6 @@ const passport = require('passport')
 const flash = require('connect-flash');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
-const bcrypt = require('bcrypt');
 const speakeasy = require('speakeasy');
 const paypal = require('paypal-rest-sdk')
 const escapeHtml = require('escape-html')
