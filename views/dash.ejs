@@ -23,18 +23,27 @@
                     
                     <div class="col-md-4">
                         <div class="mining-stats text-center">
-                            <div class="dashboard-icons">
-                                <i class="fas fa-chart-line text-success"></i>
-                                <div class="icon-label"> <span class="text-warning">1 BTC </span> - Bitcoin Price</div>
+                          <div class="dashboard-icons">
+                            <i class="fas fa-chart-line text-success"></i>
+                            <div class="icon-label"> <span class="text-warning">1 BTC </span> - Bitcoin Price</div>
+                          </div>
+                          <!-- Include the content from the trend-card here -->
+                          <div class="trend-card">
+                            <div class="card-title-wrapper">
+                              <img src="/images/coin-1.svg" width="24" height="24" alt="bitcoin logo">
+                              <a href="#" class="card-title">Bitcoin <span class="span">BTC/USD</span></a>
                             </div>
-                            <% if (cryptoData && cryptoData.bitcoin && cryptoData.bitcoin.usd) { %>
-                                <h2>USD <span class="text-success"><%= cryptoData.bitcoin.usd %></span></h2>
-                              <% } else { %>
-                                <p>Data unavailable</p>
-                              <% } %>
+                            <% if (cryptoData && cryptoData.USD) { %>
+                              <data class="card-value" value="<%= cryptoData.USD %>">USD <%= cryptoData.USD %></data>
                               
+                            <% } else { %>
+                              <p>No USD value available for Bitcoin</p>
+                            <% } %>
+                          </div>
                         </div>
-                    </div>
+                      </div>
+                      
+                      
 
                     <!-- dashboard.ejs -->
 

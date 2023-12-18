@@ -43,88 +43,35 @@
   
         <section class="section trend" aria-label="crypto trend" data-section id="market">
           <div class="container">
-              <div class="trend-tab">
-                  <ul class="tab-nav">
-                      <li>
-                          <button class="tab-btn active">Crypto</button>
-                      </li>
-                  </ul>
-                  <ul class="tab-content">
-                      <li>
-                          <div class="trend-card">
-                              <div class="card-title-wrapper">
-                                  <img src="/images/coin-1.svg" width="24" height="24" alt="bitcoin logo">
-                                  <a href="#" class="card-title">Bitcoin <span class="span">BTC/USD</span></a>
-                              </div>
-                              <% if (cryptoData && cryptoData.bitcoin && typeof cryptoData.bitcoin.usd !== 'undefined') { %>
-                                  <data class="card-value" value="<%= cryptoData.bitcoin.usd %>">USD <%= cryptoData.bitcoin.usd %></data>
-                                  <div class="card-analytics">
-                                      <data class="current-price" value="<%= cryptoData.bitcoin.usd %>"><%= cryptoData.bitcoin.usd %></data>
-                                  </div>
-                              <% } else { %>
-                                  <p>No USD value available for Bitcoin</p>
-                              <% } %>
-                          </div>
-                      </li>
-                      <!-- Repeat the structure for Ethereum, Tether, and other cryptocurrencies -->
-                      <!-- Example for Ethereum -->
-                      <li>
-                          <div class="trend-card active">
-                              <div class="card-title-wrapper">
-                                  <img src="/images/coin-2.svg" width="24" height="24" alt="ethereum logo">
-                                  <a href="#" class="card-title">Ethereum <span class="span">ETH/USD</span></a>
-                              </div>
-                              <% if (cryptoData && cryptoData.ethereum && typeof cryptoData.ethereum.usd !== 'undefined') { %>
-                                  <data class="card-value" value="<%= cryptoData.ethereum.usd %>">USD <%= cryptoData.ethereum.usd %></data>
-                                  <div class="card-analytics">
-                                      <data class="current-price" value="<%= cryptoData.ethereum.usd %>"><%= cryptoData.ethereum.usd %></data>
-                                  </div>
-                              <% } else { %>
-                                  <p>No USD value available for Ethereum</p>
-                              <% } %>
-                          </div>
-                      </li>
-                      <!-- Example for Tether -->
-                      <li>
-                          <div class="trend-card">
-                              <div class="card-title-wrapper">
-                                  <img src="/images/coin-3.svg" width="24" height="24" alt="tether logo">
-                                  <a href="#" class="card-title">Tether <span class="span">USDT/USD</span></a>
-                              </div>
-                              <% if (cryptoData && cryptoData.tether && typeof cryptoData.tether.usd !== 'undefined') { %>
-                                  <data class="card-value" value="<%= cryptoData.tether.usd %>">USD <%= cryptoData.tether.usd %></data>
-                                  <div class="card-analytics">
-                                      <data class="current-price" value="<%= cryptoData.tether.usd %>"><%= cryptoData.tether.usd %></data>
-                                  </div>
-                              <% } else { %>
-                                  <p>No USD value available for Tether</p>
-                              <% } %>
-                          </div>
-                      </li>
-                      
-                      <!-- Example for Binance Coin (BNB) -->
-                      <li>
-                        <div class="trend-card">
-                            <div class="card-title-wrapper">
-                                <img src="/images/coin-4.svg" width="24" height="24" alt="bnb logo">
-                                <a href="#" class="card-title">BNB <span class="span">BNB/USD</span></a>
-                            </div>
-                            <% if (cryptoData && cryptoData.binancecoin && typeof cryptoData.binancecoin.usd !== 'undefined') { %>
-                                <data class="card-value" value="<%= cryptoData.binancecoin.usd %>">USD <%= cryptoData.binancecoin.usd %></data>
-                                <div class="card-analytics">
-                                    <data class="current-price" value="<%= cryptoData.binancecoin.usd %>"><%= cryptoData.binancecoin.usd %></data>
-                                </div>
-                            <% } else { %>
-                                <p>No USD value available for Binance Coin (BNB)</p>
-                            <% } %>
-                        </div>
-                      </li>
-
-                  </ul>
-              </div>
+            <div class="trend-tab">
+              <ul class="tab-nav">
+                <li>
+                  <button class="tab-btn active">Crypto</button>
+                </li>
+              </ul>
+              <ul class="tab-content">
+                <li>
+                  <div class="trend-card">
+                    <div class="card-title-wrapper">
+                      <img src="/images/coin-1.svg" width="24" height="24" alt="bitcoin logo">
+                      <a href="#" class="card-title">Bitcoin <span class="span">BTC/USD</span></a>
+                    </div>
+                    <% if (cryptoData && cryptoData.USD) { %>
+                      <data class="card-value" value="<%= cryptoData.USD %>">USD <%= cryptoData.USD %></data>
+                      <div class="card-analytics">
+                        <data class="current-price" value="<%= cryptoData.USD %>"><%= cryptoData.USD %></data>
+                      </div>
+                    <% } else { %>
+                      <p>No USD value available for Bitcoin</p>
+                    <% } %>
+                  </div>
+                </li>
+                <!-- Add similar sections for other cryptocurrencies if needed -->
+              </ul>
+            </div>
           </div>
-      </section>
-      
+        </section>
+        
   
   
   

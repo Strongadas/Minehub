@@ -178,11 +178,18 @@ app.get('/',async(req,res)=>{
         res.status(500).send('Error fetching data');
       }
 })
-// Function to fetch cryptocurrency prices
-async function getCryptoPrices() {
-    const response = await axios.get('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
-    return response.data;
+// Function to fetch cryptocurrency pricesasync function getCryptoPrices() {
+  async function getCryptoPrices() {
+    try {
+      const response = await axios.get('https://min-api.cryptocompare.com/data/price?fsym=BTC&tsyms=USD');
+      return response.data;
+    } catch (error) {
+      console.error('Error occurred while fetching data:', error);
+      throw error;
+    }
   }
+  
+
 
   app.get('/login',(req,res)=>{
     const errorMessage = req.flash('error')[0];
