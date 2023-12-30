@@ -14,6 +14,7 @@ const speakeasy = require('speakeasy');
 const paypal = require('paypal-rest-sdk')
 const escapeHtml = require('escape-html')
 const Coinpayments = require('coinpayments');
+const { v4: uuidv4 } = require('uuid');
 
 
 
@@ -25,6 +26,13 @@ paypal.configure({
   client_secret: process.env.PAYPAL_SECRET,
 })
 
+/*
+paypal.configure({
+  mode: 'sandbox', 
+  client_id:"AWN3LeQIwWvpNTSN9MJSA3EpLedt7ua3Jy-u7s-38M0T-na3su0JtuCXOsi0IS4xRoAh2pwPFMpCln3y" ,
+  client_secret: "ENPeIsWVGnT_7RaAYAnlOXLzNVFfpUP8Dx0Xfbk2VMpHyLWpLWYF2eVDFXkCe48-9UXm5juP_nFxo7MN",
+})*/
+
 
 const client = new Coinpayments({
   key: process.env.COINPAYMENT_KEY,
@@ -35,6 +43,8 @@ const client = new Coinpayments({
 //stripe api credentials
 const PUBLISHABLE_KEY = process.env.STRIPE_PUBLISH_KEY
 const SECRET_KEY = process.env.STRIPE_SECRET_KEY
+//const PUBLISHABLE_KEY = "pk_test_51Nv1LICzBZHxsYa2cLrtr1GvgwdeUBHbZU8zRyOyx0li7nnCod7zLOGxWnfKznCfSqsZRZ8kPyOycZMOafhzsdjV00I1GM2POK"
+//const SECRET_KEY = "sk_test_51Nv1LICzBZHxsYa2sTmO3PAdIV3I1CZGezIwpS3BM3aXGZoeZKdPmgHLksQvXpKeZ0VBMC6Af4lMK4qHI8zkm1TO00pavdmEyM"
 const stripe  = require('stripe')(SECRET_KEY)
 
 
@@ -76,6 +86,7 @@ const userSchema = new mongoose.Schema ({
       type:String,
 
     },
+    referralCode: String,
     hashRates: [
       {
         coin: String,
@@ -132,12 +143,21 @@ const transactionSchema = new mongoose.Schema({
     default: Date.now
   }
 });
+// Referral schema
+const referralSchema = new mongoose.Schema({
+  referrer: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  referred: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now },
+});
+
+
 userSchema.plugin(passportLocalMongoose)
 
 
 
 const User = new mongoose.model('User',userSchema)
 const Transaction = mongoose.model('Transaction', transactionSchema);
+const Referral = mongoose.model('Referral', referralSchema);
 
 
 passport.use(User.createStrategy())
@@ -159,6 +179,11 @@ function ensureAuthenticated(req, res, next) {
     
     res.redirect('/login');
 }
+// Generate a unique referral code for a new user
+function generateReferralCode(){
+  return uuidv4().substr(0, 8); // Unique identifier using uuid, shortened for brevity
+};
+
 
 const transporter = nodemailer.createTransport({
   service: 'Gmail', // Use the appropriate email service
@@ -298,15 +323,6 @@ app.get('/dash', async (req, res, next) => {
     res.status(500).send('Error fetching data');
   }
 });
-
-
-
-
-
-
-
-
-
 
 
 app.get('/transactions',ensureAuthenticated,async(req,res)=>{
@@ -595,6 +611,114 @@ app.get('/payment_success', ensureAuthenticated, async (req, res) => {
   });
 });
 
+app.get('/referral/:userId', async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const referralLink = `https://yourdomain.com/register/${user.referralCode}`;
+    res.render('referral', { referralLink }); // Render 'register.ejs' and pass referralLink
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/forgot-password', (req, res) => {
+  const email = req.body.email;
+
+  // Generate a unique reset token
+  const resetToken = generateResetToken();
+
+  // Update the user's reset token and expiration time in the database
+  User.findOneAndUpdate(
+    { email: email },
+    {
+      $set: {
+        resetPasswordToken: resetToken,
+        resetPasswordExpires: Date.now() + 3600000, // Token expires in 1 hour (adjust as needed)
+      },
+    },
+    { new: true },
+    (err, user) => {
+      if (err || !user) {
+        return res.status(404).send('User not found');
+      }
+
+      // Sending email with reset link containing the token
+      const resetLink = `http://minehub.onrender.com/reset/${resetToken}`;
+      const mailOptions = {
+        from: 'hello.minehub@gmail.com',
+        to: email,
+        subject: 'Password Reset',
+        text: `Your password reset link: ${resetLink}`,
+      };
+
+      transporter.sendMail(mailOptions, (error, info) => {
+        if (error) {
+          console.error('Error:', error);
+          res.status(500).send('Failed to send reset email.');
+        } else {
+          console.log('Email sent:', info.response);
+          res.render('success-reset');
+        }
+      });
+    }
+  );
+});
+
+
+// This function generates a unique reset token
+function generateResetToken() {
+  return crypto.randomBytes(20).toString('hex');
+}
+
+app.post('/reset/:token', (req, res) => {
+  const token = req.params.token;
+  const newPassword = req.body.password;
+
+  // Find the user by the reset token and check if it's still valid
+  User.findOne({
+    resetPasswordToken: token,
+    resetPasswordExpires: { $gt: Date.now() },
+  }, (err, user) => {
+    if (err || !user) {
+      return res.render('error', { message: 'Invalid or expired token' });
+    }
+
+    // Set the new password using Passport's setPassword method
+    user.setPassword(newPassword, (passwordErr) => {
+      if (passwordErr) {
+        return res.render('error', { message: 'Failed to reset password' });
+      }
+
+      // Clear the reset token and expiration date
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+
+      // Save the updated user object
+      user.save((saveErr) => {
+        if (saveErr) {
+          return res.render('error', { message: 'Failed to reset password' });
+        }
+
+        // Log the user in again after password reset (optional)
+        req.login(user, (loginErr) => {
+          if (loginErr) {
+            return res.render('error', { message: 'Failed to log in after password reset' });
+          }
+          
+          // Password successfully reset, redirect to a success page or login page
+          res.render('password-reset-success'); // Render a success page
+          // Or you can redirect to a login page: res.redirect('/login');
+        });
+      });
+    });
+  });
+});
 
 
 let hashrateAmount;
@@ -771,13 +895,18 @@ app.post('/usdt', ensureAuthenticated, async (req, res) => {
     label: user._id // Use the user ID as the label for this address
   }, (err, address) => {
     if (err) {
-      console.error(err);
-      return;
+      console.error('Error generating address:', err);
+      return res.status(500).send('Error generating address');
     }
-    console.log(`Generated ${currency} address for ${user._id}:`, address.address     );
-    res.render('usdt',{address:address.address,amount})
-    // Store this address securely for the user
+    if (!address || !address.address) {
+      console.error('No address generated');
+      return res.status(500).send('No address generated');
+    }
+  
+    console.log(`Generated ${currency} address for ${user._id}:`, address.address);
+    res.render('usdt', { address: address.address, amount });
   });
+  
 
  
 });
@@ -959,12 +1088,6 @@ app.post('/payment/callback', async (req, res) => {
     return res.status(500).send('Error processing payment callback');
   }
 });
-
-
-
-
-
-
 
 
 
@@ -1376,30 +1499,51 @@ app.post('/verify', async (req, res) => {
   
 
 
-app.post('/register',(req,res)=>{
-
+app.post('/register', async (req, res) => {
+  try {
     const { username, password, name } = req.body;
 
+    const referralCode = generateReferralCode()
+
+    console.log("referralCode",referralCode)
+
     const newUser = new User({ username, name });
-
-    
-    // Use Passport's register method to add the user to the database
-    User.register(newUser, password, (err, user) => {
-        if (err) {
-            console.log(err);
-            res.redirect('/');
-            
-        } else {
-            
-            passport.authenticate('local')(req, res, () => {
-                res.redirect('/dash?welcomeMessage');
-                console.log(req.body)
-                
-
-            });
+    // Register the user using Passport's register method
+    User.register(newUser, password, async (err, user) => {
+      if (err) {
+        console.log(err);
+        return res.redirect('/');
+      } else {
+        try {
+          // Check if there's a referralCode in the request
+          if (referralCode) {
+            // Find the user who referred this new user
+            const referrer = await User.findOne({ referralCode });
+            if (referrer) {
+              // Save the referral relationship in the database
+              const referral = new Referral({
+                referrer: referrer._id,
+                referred: user._id,
+              });
+              await referral.save();
+              // Handle rewards to the referrer here
+            }
+          }
+          // Authenticate the user and redirect to dashboard
+          passport.authenticate('local')(req, res, () => {
+            res.redirect('/dash?welcomeMessage');
+          });
+        } catch (error) {
+          console.log(error);
+          res.redirect('/');
         }
+      }
     });
-})
+  } catch (err) {
+    console.error(err);
+    res.redirect('/');
+  }
+});
 
 
 app.post(
@@ -1408,6 +1552,7 @@ app.post(
     failureRedirect: '/login',
     failureFlash: true,
   }),
+  //shsjjsdg9vsuvdcfaHDWAFscjvySMhefgc]=0o-tbhdgjcjzj jd jvjyfyasysujhadguxfydnaecvy5edszc jxn kbcvcmcdf
   async (req, res, next) => {
     try {
       const user = req.user;
