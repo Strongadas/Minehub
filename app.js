@@ -646,7 +646,7 @@ app.post('/forgot-password', (req, res) => {
         if (err) throw err;
 
    
-      const resetLink = `https://minehub.onrender.com//reset/${token}`;
+      const resetLink = `https://minehub.onrender.com/reset/${token}`;
 
         transporter.sendMail({
           to: username,
