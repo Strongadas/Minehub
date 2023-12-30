@@ -628,96 +628,80 @@ app.get('/referral/:userId', async (req, res) => {
 });
 
 app.post('/forgot-password', (req, res) => {
-  const email = req.body.email;
+  crypto.randomBytes(20, (err, buf) => {
+    if (err) throw err;
 
-  // Generate a unique reset token
-  const resetToken = generateResetToken();
+    const token = buf.toString('hex');
+    const username = req.body.email; // Assuming this is obtained from the request body
 
-  // Update the user's reset token and expiration time in the database
-  User.findOneAndUpdate(
-    { email: email },
-    {
-      $set: {
-        resetPasswordToken: resetToken,
-        resetPasswordExpires: Date.now() + 3600000, // Token expires in 1 hour (adjust as needed)
-      },
-    },
-    { new: true },
-    (err, user) => {
+    User.findOne({ username }, (err, user) => {
       if (err || !user) {
-        return res.status(404).send('User not found');
+        return res.render('error', { message: 'User not found' });
       }
 
-      // Sending email with reset link containing the token
-      const resetLink = `http://minehub.onrender.com/reset/${resetToken}`;
-      const mailOptions = {
-        from: 'hello.minehub@gmail.com',
-        to: email,
-        subject: 'Password Reset',
-        text: `Your password reset link: ${resetLink}`,
-      };
+      user.resetPasswordToken = token;
+      user.resetPasswordExpires = Date.now() + 3600000;
 
-      transporter.sendMail(mailOptions, (error, info) => {
-        if (error) {
-          console.error('Error:', error);
-          res.status(500).send('Failed to send reset email.');
-        } else {
-          console.log('Email sent:', info.response);
-          res.render('success-reset');
-        }
-      });
-    }
-  );
-});
+      user.save((err) => {
+        if (err) throw err;
 
+   
+      const resetLink = `https://minehub.onrender.com//reset/${token}`;
 
-// This function generates a unique reset token
-function generateResetToken() {
-  return crypto.randomBytes(20).toString('hex');
-}
-
-app.post('/reset/:token', (req, res) => {
-  const token = req.params.token;
-  const newPassword = req.body.password;
-
-  // Find the user by the reset token and check if it's still valid
-  User.findOne({
-    resetPasswordToken: token,
-    resetPasswordExpires: { $gt: Date.now() },
-  }, (err, user) => {
-    if (err || !user) {
-      return res.render('error', { message: 'Invalid or expired token' });
-    }
-
-    // Set the new password using Passport's setPassword method
-    user.setPassword(newPassword, (passwordErr) => {
-      if (passwordErr) {
-        return res.render('error', { message: 'Failed to reset password' });
-      }
-
-      // Clear the reset token and expiration date
-      user.resetPasswordToken = undefined;
-      user.resetPasswordExpires = undefined;
-
-      // Save the updated user object
-      user.save((saveErr) => {
-        if (saveErr) {
-          return res.render('error', { message: 'Failed to reset password' });
-        }
-
-        // Log the user in again after password reset (optional)
-        req.login(user, (loginErr) => {
-          if (loginErr) {
-            return res.render('error', { message: 'Failed to log in after password reset' });
+        transporter.sendMail({
+          to: username,
+          subject: 'Password Reset',
+          html: `You can reset your password <a href="${resetLink}">here</a>.`,
+        }, (err) => {
+          if (err) {
+            return res.render('error', { message: 'Error sending reset email' });
           }
-          
-          // Password successfully reset, redirect to a success page or login page
-          res.render('password-reset-success'); // Render a success page
-          // Or you can redirect to a login page: res.redirect('/login');
+          res.render('success-reset', { message: 'Email sent' });
         });
       });
     });
   });
+});
+
+
+
+app.post('/reset/:token', async (req, res) => {
+  const token = req.params.token;
+  const newPassword = req.body.password; // Assuming password is sent in request body
+
+  try {
+    // Find user by the reset token and check if it's still valid
+    const user = await User.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      return res.render('error', { message: 'Invalid or expired token' });
+    }
+
+    console.log('new password ',newPassword)
+    // Use setPassword to update the user's password
+    user.setPassword(newPassword, async () => {
+      try {
+        await user.save();
+
+        // Reset token and expiration after password change
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpires = undefined;
+        await user.save();
+
+        // Password updated successfully, render a success view
+        return res.render('password-reset-success');
+      } catch (error) {
+        console.error('Error resetting password:', error);
+        return res.render('error', { message: 'Error resetting password' });
+      }
+    });
+  } catch (error) {
+    console.error('Error finding user:', error);
+    return res.render('error', { message: 'Error finding user' });
+  }
 });
 
 
