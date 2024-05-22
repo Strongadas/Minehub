@@ -41,7 +41,11 @@
                 <select class="form-control" id="paymentMethod" name="paymentMethod">
                   <option value="creditCard">Credit Card</option>
                   <option value="paypal">PayPal</option>
+<<<<<<< HEAD
                   <option value="crypto">BITCOIN</option>
+=======
+                  <option value="crypto">Bitcoin</option>
+>>>>>>> 457600ca7dca67c83b1245268631f0fb6b684f65
                   <option value="usdt">USDT</option>
                 </select>
 
@@ -66,6 +70,7 @@
     </div>
   </div>
 <br>
+<<<<<<< HEAD
 <br> <br> <br>
 
 
@@ -74,27 +79,50 @@
   <div class="text-center mb-2">
     <label for="inputType">Calculate by Hash or USD:</label>
     <select id="inputType" onchange="toggleInput()" class="form-control mb-1">
+=======
+
+<div class="container">
+  <h1 class="text-center mb-4">Cloud Mining Calculator</h1>
+  <div class="text-center mb-4">
+    <label for="inputType">Calculate by Hash or USD:</label>
+    <select id="inputType" onchange="toggleInput()" class="form-control mb-2">
+>>>>>>> 457600ca7dca67c83b1245268631f0fb6b684f65
       <option value="hashRate">Hash Rate (1 Hash = $12)</option>
       <option value="usdAmount">USD Amount</option>
     </select>
     <div id="hashRateInput">
       <label for="hashRate">Enter Hash Rate:</label>
+<<<<<<< HEAD
       <input type="number" id="hashRate" step="1" min="1" max="1000" placeholder="Hash rate (min 1, max 1000)" class="form-control mb-1">
+=======
+      <input type="number" id="hashRate" step="1" min="1" max="1000" placeholder="Hash rate (min 1, max 1000)" class="form-control mb-2">
+>>>>>>> 457600ca7dca67c83b1245268631f0fb6b684f65
       <div id="hashRateError" class="error text-danger" style="display: none;">Hash rate must be between 1TH to 1000TH.</div>
     </div>
     <div id="usdAmountInput" style="display: none;">
       <label for="usdAmount">Enter USD Amount:</label>
+<<<<<<< HEAD
       <input type="number" id="usdAmount" step="0.01" min="12" max="12000" placeholder="USD amount (min $12, max $12000)" class="form-control mb-1">
+=======
+      <input type="number" id="usdAmount" step="0.01" min="12" max="12000" placeholder="USD amount (min $12, max $12000)" class="form-control mb-2">
+>>>>>>> 457600ca7dca67c83b1245268631f0fb6b684f65
       <div id="usdAmountError" class="error text-danger" style="display: none;">USD amount must be between $12 to $12000.</div>
     </div>
     <div id="resultContainer" style="display: none;">
       <div id="resultText" class="font-weight-bold"></div>
     </div>
+<<<<<<< HEAD
     <button onclick="calculateInterest()" class="btn btn-primary mt-2">Calculate</button>
   </div>
 </div>
 
 
+=======
+    <button onclick="calculateInterest()" class="btn btn-primary mt-3">Calculate</button>
+  </div>
+</div>
+
+>>>>>>> 457600ca7dca67c83b1245268631f0fb6b684f65
   <script>
     function calculatePrice() {
       const hashrateAmount = parseFloat(document.getElementById('hashrateAmount').value);

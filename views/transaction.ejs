@@ -4,6 +4,7 @@
         <a href="/transactions" style="text-align: end;">View all</a>
     </div>
 
+<<<<<<< HEAD
     <div class="row">
         <div class="col-12">
             <table class="table table-striped">
@@ -28,4 +29,22 @@
             </table>
         </div>
     </div>
+=======
+    <% recentTransactions.forEach(transaction => { %>
+        <div class="transaction-item">
+            <div class="transaction-details">
+                <span class="transaction-icon"><i class="fas fa-coins"></i></span>
+                <% if (transaction.description === 'Withdraw') { %>
+                    <span class="transaction-description" style="color: red;"><%= transaction.description %></span> 
+                    <span class="transaction-amount"> -<%= transaction.amount %> BTC to <%= user.wishlistedAddress %></span>
+                <% } else { %>
+                    <span class="transaction-description" style="color: green;"><%= transaction.description %></span>  +
+                    <span class="transaction-amount"> <%= transaction.amount %>TH</span>
+                <% } %>
+                
+                <span class="transaction-date"><%= transaction.timestamp.toISOString().split('T')[0] %></span>
+            </div>
+        </div>
+    <% }) %>
+>>>>>>> 457600ca7dca67c83b1245268631f0fb6b684f65
 </div>
