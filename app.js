@@ -15,11 +15,10 @@ const paypal = require('paypal-rest-sdk')
 const escapeHtml = require('escape-html')
 const Coinpayments = require('coinpayments');
 const { v4: uuidv4 } = require('uuid');
-<<<<<<< HEAD
+
 const path = require('path');
 const multer = require('multer'); 
-=======
->>>>>>> 457600ca7dca67c83b1245268631f0fb6b684f65
+
 
 
 
@@ -44,7 +43,7 @@ const client = new Coinpayments({
   secret: process.env.COINPAYMENT_SECRET,  
 });
 
-<<<<<<< HEAD
+
 // Set up multer for handling file uploads
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -56,8 +55,7 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ dest: 'uploads/' });
-=======
->>>>>>> 457600ca7dca67c83b1245268631f0fb6b684f65
+
 
 //stripe api credentials
 const PUBLISHABLE_KEY = process.env.STRIPE_PUBLISH_KEY
@@ -893,7 +891,7 @@ app.post('/usdt', ensureAuthenticated, async (req, res) => {
   const userEmail = user.username
   const currency = 'USDT';
 
-<<<<<<< HEAD
+
   
   
     
@@ -943,7 +941,7 @@ app.get('/manual-payment',ensureAuthenticated,(req,res)=>{
   res.render('manual-payment')
 })
 
-=======
+app.post('/usdt',ensureAuthenticated,(req,res)=>{ 
   client.getCallbackAddress({
     currency,
     label: user._id // Use the user ID as the label for this address
@@ -959,12 +957,13 @@ app.get('/manual-payment',ensureAuthenticated,(req,res)=>{
   
     console.log(`Generated ${currency} address for ${user._id}:`, address.address);
     res.render('usdt', { address: address.address, amount });
-  });
-  
+  })
+
+})
 
  
-});
->>>>>>> 457600ca7dca67c83b1245268631f0fb6b684f65
+
+
 
 app.post('/payment/callback', async (req, res) => {
   const payload = req.body; // This will contain transaction details from CoinPayments
@@ -1147,7 +1146,7 @@ app.post('/payment/callback', async (req, res) => {
 
 
 
-<<<<<<< HEAD
+
 app.post('/bitcoin', ensureAuthenticated, (req, res) => {
    amount = req.body.amount;
    amount = parseFloat(amount)
@@ -1158,9 +1157,13 @@ app.post('/bitcoin', ensureAuthenticated, (req, res) => {
   
   
     
+  
+  
+    
     res.render('btc', { amount,currency,hashrateAmount });
 
-=======
+
+  })
 app.post('/bitcoin', ensureAuthenticated, async (req, res) => {
    amount = req.body.amount;
    amount = parseFloat(amount)
@@ -1201,7 +1204,7 @@ app.post('/bitcoin', ensureAuthenticated, async (req, res) => {
     console.error('Error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
->>>>>>> 457600ca7dca67c83b1245268631f0fb6b684f65
+
 
   });
 
